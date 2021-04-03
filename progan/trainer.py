@@ -10,6 +10,8 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 import torch.nn.functional as F
 
+from tqdm.auto import tqdm
+
 import numpy as np
 
 class TrainingArguments:
@@ -54,7 +56,7 @@ class GANTrainer:
         
         self.n_iter = 0
         self.steps_in_rank = 0
-        self.current_batch_size = self.args.batch_size[0]
+    
         
         self.history = {'G_loss':[], 'D_loss':[], 'img_checkpoint':[], 'd_accuracy_fake':[], 'd_accuracy_real':[]}
                                
@@ -69,10 +71,20 @@ class GANTrainer:
 
         if self.args.resume_from is not None:
             self.load(self.args.resume_from)
+
+        self.current_batch_size = self.args.batch_size[self.generator.rank]
+
+        self.checkpoint_noise = self.generator.generate_latent_points(self.args.checkpoint_imgs)
         
     
     def train(self):
-        checkpoint_noise = self.generator.generate_latent_points(self.args.checkpoint_imgs)
+        self.progress_bar = tqdm(
+            desc=f"Training : Rank {self.generator.rank} = {4*2**self.generator.rank}x{4*2**self.generator.rank}", 
+            total=self.args.rank_steps[self.discriminator.rank],
+            mininterval=1.,
+            initial = self.steps_in_rank,
+        )
+        
         self.dataloader= DataLoader(self.dataset,
                                                  batch_size=self.current_batch_size,
                                                  shuffle=True,
@@ -105,7 +117,7 @@ class GANTrainer:
 
             g_loss = self.gan_loss.g_loss_optimize(self.discriminator, real, fake, alpha)
             
-            self.log(d_loss, g_loss, checkpoint_noise, alpha)
+            self.log(d_loss, g_loss, self.checkpoint_noise, alpha)
             self.step()
             
         
@@ -130,11 +142,20 @@ class GANTrainer:
     def step(self):
         self.n_iter +=1
         self.steps_in_rank +=1
+
+        self.progress_bar.update()
         
         if self.generator.rank <= self.generator.depth and self.steps_in_rank==self.args.rank_steps[self.generator.rank]:
             self.steps_in_rank =0
             self.generator.grow()
             self.discriminator.grow()
+
+            self.progress_bar = tqdm(
+                desc="Training : ", 
+                total=self.args.rank_steps[self.discrimator.rank],
+                mininterval=1.,
+                initial = self.steps_in_rank,
+            )
             
             if self.current_batch_size != self.args.batch_size[self.generator.rank]:
                 self.current_batch_size = self.args.batch_size[self.generator.rank]
