@@ -16,12 +16,12 @@ import numpy as np
 
 class TrainingArguments:
     def __init__(self,
-                 save_steps=4000,
+                 save_steps=1000,
                  log_steps = 10,
                  log_dir="logs",
                  generate_steps=500,
-                 rank_steps = [4000, 8000, 16000, 32000, 64000, 128000],
-                 transition_steps = [4000, 8000, 16000, 32000, 64000],
+                 rank_steps = [80000, 60000, 40000, 40000, 40000, 40000],
+                 transition_steps = [60000, 40000, 40000, 40000, 40000],
                  batch_size = [16, 16, 16, 16, 16, 16],
                  num_workers = 0,
                  checkpoint_imgs = 8,
@@ -53,6 +53,7 @@ class GANTrainer:
         self.args = args
         
         self.training_id = str(round(time.time()))
+        self.progress_bar = None
         
         self.n_iter = 0
         self.steps_in_rank = 0
@@ -78,6 +79,8 @@ class GANTrainer:
         
     
     def train(self):
+        if self.progress_bar is not None:
+            self.progress_bar.close()
         self.progress_bar = tqdm(
             desc=f"Training : Rank {self.generator.rank} = {4*2**self.generator.rank}x{4*2**self.generator.rank}", 
             total=self.args.rank_steps[self.discriminator.rank],
@@ -95,7 +98,7 @@ class GANTrainer:
         while self.n_iter < self.new_rank_steps[-1]:
             
             factor = 2**(self.generator.depth-self.generator.rank)
-            alpha = 1. if self.generator.rank==0 else min(self.steps_in_rank,
+            self.alpha = 1. if self.generator.rank==0 else min(self.steps_in_rank,
                                                           self.args.transition_steps[self.generator.rank-1]
                                                          )/self.args.transition_steps[self.generator.rank-1]
             
@@ -111,13 +114,13 @@ class GANTrainer:
             real = F.avg_pool2d(real, factor)   
             
             noise = self.generator.generate_latent_points(n_items)
-            fake = self.generator(noise, alpha)
+            fake = self.generator(noise, self.alpha)
             
-            d_loss = self.gan_loss.d_loss_optimize(self.discriminator, real, fake, alpha)
+            d_loss = self.gan_loss.d_loss_optimize(self.discriminator, real, fake, self.alpha)
 
-            g_loss = self.gan_loss.g_loss_optimize(self.discriminator, real, fake, alpha)
+            g_loss = self.gan_loss.g_loss_optimize(self.discriminator, real, fake, self.alpha)
             
-            self.log(d_loss, g_loss, self.checkpoint_noise, alpha)
+            self.log(d_loss, g_loss, self.checkpoint_noise, self.alpha)
             self.step()
             
         
@@ -144,15 +147,17 @@ class GANTrainer:
         self.steps_in_rank +=1
 
         self.progress_bar.update()
+        self.progress_bar.set_postfix(alpha = self.alpha)
         
         if self.generator.rank <= self.generator.depth and self.steps_in_rank==self.args.rank_steps[self.generator.rank]:
             self.steps_in_rank =0
             self.generator.grow()
             self.discriminator.grow()
 
+            self.progress_bar.close()
             self.progress_bar = tqdm(
-                desc="Training : ", 
-                total=self.args.rank_steps[self.discrimator.rank],
+                desc=f"Training : Rank {self.generator.rank} = {4*2**self.generator.rank}x{4*2**self.generator.rank}",
+                total=self.args.rank_steps[self.discriminator.rank],
                 mininterval=1.,
                 initial = self.steps_in_rank,
             )
