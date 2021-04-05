@@ -20,9 +20,9 @@ class TrainingArguments:
                  log_steps = 10,
                  log_dir="logs",
                  generate_steps=500,
-                 rank_steps = [80000, 60000, 40000, 40000, 40000, 40000],
+                 rank_steps = [80000, 60000, 40000, 40000, 40000, 80000],
                  transition_steps = [60000, 40000, 40000, 40000, 40000],
-                 batch_size = [16, 16, 16, 16, 16, 16],
+                 batch_size = [16, 16, 16, 16, 16, 8],
                  num_workers = 0,
                  checkpoint_imgs = 8,
                  resume_from = None,
@@ -41,6 +41,28 @@ class TrainingArguments:
         self.resume_from = resume_from
         self.save_dir = save_dir
         self.num_saves = num_saves
+
+    def save(self, file):
+        with open(file, "w", encoding="utf8") as f:
+            params = {
+                "save_steps" : self.self_steps,
+                "log_steps" : self.log_steps,
+                "generate_steps" : self.generate_steps,
+                "log_dir": self.log_dir,
+                "rank_steps":self.rank_steps,
+                "batch_size":self.batch_size,
+                "num_workers" : self.num_workers,
+                "transition_steps" : self.transition_steps,
+                "checkpoint_imgs" : self.checkpoint_imgs,
+                "save_dir": self.save_dir,
+                "num_saves": self.num_saves
+            }
+            json.dump(params, f)
+
+    @staticmethod
+    def load(resume_from=None):
+        """Not implemented"""
+        pass
 
 
 class GANTrainer:
@@ -103,11 +125,11 @@ class GANTrainer:
                                                          )/self.args.transition_steps[self.generator.rank-1]
             
             try:
-                real = next(self.iterator)
+                real, _ = next(self.iterator)
             except StopIteration:
                 #del self.iterator
                 self.iterator = iter(self.dataloader)
-                real = next(self.iterator)
+                real, _ = next(self.iterator)
             
             n_items = len(real)
             real = real.to(self.discriminator.get_device())

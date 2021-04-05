@@ -1,3 +1,5 @@
+import json
+
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
@@ -91,3 +93,43 @@ class Generator(nn.Module):
     
     def generate_latent_points(self, batch_size):
         return torch.randn(batch_size, self.latent_dim, 1,1, device=self.get_device())
+
+
+class GANConfiguration:
+    def __init__(self, latent_dim = 256, filters_multiplicator=16, max_filters=256, gan_depth=5, image_depth=3, name="default_name"):
+        self.latent_dim = latent_dim
+        self.filters_multiplicator = filters_multiplicator
+        self.max_filters = max_filters
+        self.gan_depth = gan_depth
+        self.image_depth = image_depth
+        self.name = name
+
+    def save(self, file):
+        config_dict = {
+            'name': self.name,
+            "latent_dim": self.latent_dim,
+            "filters_multiplicator" : self.filters_multiplicator,
+            "gan_depth" : self.gan_depth,
+            "image_depth" : self.image_depth,
+        }
+        with open(file, "w", encoding="utf8") as f:
+            json.dump(config_dict, f)
+
+    @staticmethod
+    def load(path):
+        with open(path, "r", encoding="utf8") as f:
+            config_dict = json.load(f)
+        return GANConfiguration(
+            config_dict['latent_dim'],
+            config_dict['filters_multiplicator'],
+            config_dict['gan_depth'],
+            config_dict['image_depth'],
+            config_dict['name']
+
+
+        )
+
+    def build_gan(self):
+        g = Generator(self.latent_dim, self.filters_multiplicator, self.max_filters, self.gan_depth, self.image_depth)
+        d = Discriminator(self.latent_dim, self.filters_multiplicator, self.max_filters, self.gan_depth, self.image_depth)
+        return g, d
