@@ -3,6 +3,7 @@ import os
 import shutil
 import random
 import json
+import copy
 
 import torch
 import torchvision
@@ -12,6 +13,8 @@ import torch.nn.functional as F
 
 from tqdm.auto import tqdm
 
+from progan.custom_modules import update_ema
+
 import numpy as np
 
 class TrainingArguments:
@@ -20,14 +23,17 @@ class TrainingArguments:
                  log_steps = 10,
                  log_dir="logs",
                  generate_steps=500,
-                 rank_steps = [80000, 60000, 40000, 40000, 40000, 80000],
-                 transition_steps = [60000, 40000, 40000, 40000, 40000],
+                 rank_steps = [40000, 40000, 40000, 40000, 40000, 80000],
+                 transition_steps = [40000, 40000, 40000, 40000, 80000],
                  batch_size = [16, 16, 16, 16, 16, 8],
                  num_workers = 0,
                  checkpoint_imgs = 8,
                  resume_from = None,
                  save_dir = "saves",
-                 num_saves = 3
+                 num_saves = 3,
+                 pin_memory = True,
+                 use_ema = True,
+                 ema_beta = 0.999
                 ):
         self.save_steps = save_steps
         self.log_steps = log_steps
@@ -41,6 +47,9 @@ class TrainingArguments:
         self.resume_from = resume_from
         self.save_dir = save_dir
         self.num_saves = num_saves
+        self.pin_memory = pin_memory
+        self.use_ema=use_ema,
+        self.ema_beta = ema_beta
 
     def save(self, file):
         with open(file, "w", encoding="utf8") as f:
@@ -55,7 +64,10 @@ class TrainingArguments:
                 "transition_steps" : self.transition_steps,
                 "checkpoint_imgs" : self.checkpoint_imgs,
                 "save_dir": self.save_dir,
-                "num_saves": self.num_saves
+                "num_saves": self.num_saves,
+                "pin_memory" : self.pin_memory,
+                "use_ema" : self.use_ema,
+                "ema_beta" : self.ema_beta
             }
             json.dump(params, f)
 
@@ -98,6 +110,10 @@ class GANTrainer:
         self.current_batch_size = self.args.batch_size[self.generator.rank]
 
         self.checkpoint_noise = self.generator.generate_latent_points(self.args.checkpoint_imgs)
+
+        if self.args.use_ema:
+            self.generator_shadow = copy.deepcopy(self.generator)
+            update_ema(self.generator_shadow, self.generator, beta=0) # init shadow
         
     
     def train(self):
@@ -113,7 +129,8 @@ class GANTrainer:
         self.dataloader= DataLoader(self.dataset,
                                                  batch_size=self.current_batch_size,
                                                  shuffle=True,
-                                                 num_workers=self.args.num_workers
+                                                 num_workers=self.args.num_workers,
+                                                 pin_memory=self.args.pin_memory
                                                 )
         
         self.iterator = iter(self.dataloader)
@@ -141,6 +158,9 @@ class GANTrainer:
             d_loss = self.gan_loss.d_loss_optimize(self.discriminator, real, fake, self.alpha)
 
             g_loss = self.gan_loss.g_loss_optimize(self.discriminator, real, fake, self.alpha)
+
+            if self.args.use_ema:
+                update_ema(self.generator_shadow, self.generator, self.args.ema_beta)
             
             self.log(d_loss, g_loss, self.checkpoint_noise, self.alpha)
             self.step()
@@ -189,7 +209,8 @@ class GANTrainer:
                 self.dataloader = DataLoader(self.dataset,
                                                  batch_size=self.current_batch_size,
                                                  shuffle=True,
-                                                 num_workers=self.args.num_workers
+                                                 num_workers=self.args.num_workers,
+                                                 pin_memory=self.args.pin_memory
                                                 )
                 self.iterator = iter(self.dataloader)
             

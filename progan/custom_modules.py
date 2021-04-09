@@ -185,3 +185,12 @@ class GenFinalBlock(nn.Module):
         
     def forward(self, x):
         return self.core(x)
+
+def update_ema(dest, src, beta):
+    with torch.no_grad():
+        src_param_dict = dict(src.named_parameters())
+
+        for p_name, p_dest in dest.named_parameters():
+            p_src = src_param_dict[p_name]
+            assert p_src is not p_dest
+            p_dest.copy_(beta * p_dest + (1.0 - beta) * p_src)

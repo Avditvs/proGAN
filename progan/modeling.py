@@ -49,8 +49,8 @@ class Discriminator(nn.Module):
     
     def get_device(self):
         return next(self.parameters()).device
-        
 
+        
 class Generator(nn.Module):
     def __init__(self, latent_dim, num_filters, max_filters, depth, output_dim):
         
@@ -81,7 +81,8 @@ class Generator(nn.Module):
             x = self.blocks[self.rank-1](x)
             
             new_output = self.final_blocks[self.rank](x)
-            final_output = (1-alpha)*F.interpolate(old_output, scale_factor=2)+alpha*new_output
+            old_output = F.interpolate(old_output, scale_factor=2)
+            final_output = (1-alpha)*old_output+alpha*new_output
         
         else:
             final_output = self.final_blocks[self.rank](x)

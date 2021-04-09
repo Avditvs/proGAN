@@ -5,7 +5,7 @@ class GANLoss:
         self.gradient_lambda = gradient_lambda
         self.g_optimizer = g_optimizer
         self.d_optimizer = d_optimizer
-        
+
     def gradient_penalty(self, discriminator, real, fake, alpha):
         batch_size, c, h, w = real.shape
         beta = torch.rand((batch_size, 1, 1, 1), device = discriminator.get_device())
