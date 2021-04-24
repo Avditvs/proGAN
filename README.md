@@ -8,5 +8,7 @@ The loss used in this GAN is the Wasserstein loss with gradient penalty.
 
 ## Results on CelebA
 
-These are the results obtained on the celebA dataset. The model was trained during 7 hours on a RTX2060 6Gb VRAM.
-The size of the produced images are 128 by 128
+These are the results obtained on the celebA dataset. The model was trained during 7 hours on a RTX2060 6GB VRAM.  
+The size of the produced images are 128 by 128. Theses images are not cherry picked
+
+![](imageDataCelebA.png)
